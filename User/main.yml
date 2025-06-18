@@ -1,0 +1,49 @@
+---
+- name: Main File for Qualys User Tasks 
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+      - name: Get Qualys user List
+        ansible.builtin.include_role:
+            name: qualys
+            tasks_from: qualys_user_list
+            public: yes
+        when: operation  == "qualys_user_list"
+      - name: Add Qualys user
+        ansible.builtin.include_role:
+            name: qualys
+            tasks_from: qualys_user_add
+            public: yes
+        when: operation  == "qualys_user_add"
+      - name: Edit Qualys user General
+        ansible.builtin.include_role:
+            name: qualys
+            tasks_from: qualys_user_edit_general
+            public: yes
+        when: operation == "qualys_user_edit_general"
+      - name: Edit Qualys user role
+        ansible.builtin.include_role:
+             name: qualys
+             tasks_from: qualys_user_edit_role
+             public: yes
+        when: operation == "qualys_user_edit_role"
+      - name: Delete Qualys user
+        ansible.builtin.include_role:
+              name: qualys
+              tasks_from: qualys_user_delete
+              public: yes
+        when: operation == "qualys_user_delete"
+      - name: Get Qualys user Details
+        ansible.builtin.include_role:
+              name: qualys
+              tasks_from: qualys_user_info
+              public: yes
+        when: operation == "qualys_user_info"
+      - name: Get Qualys Users with unactivated Accounts
+        ansible.builtin.include_role:
+              name: qualys
+              tasks_from: qualys_list_activation_pending
+              public: yes
+        when: operation == "qualys_list_activation_pending"

@@ -1,0 +1,75 @@
+- name: Get Qualys user Info Task Using username
+  block:
+       ### Generating the Sessio Token to validate the credentials
+      - name: Generating Session Token
+        ansible.builtin.uri:
+                url: https://qualysguard.qg1.apps.qualys.in/api/2.0/fo/session/?action=login
+                method: POST
+                body_format: form-urlencoded
+                body:
+                    username: "{{ username }}"
+                    password: "{{ password }}"
+                headers:
+                    "X-Requested-With": "Ansible"
+                    "Content-Type": "application/x-www-form-urlencoded"
+                return_content: true
+        register: login
+        ##Closing the same session post validation
+      - name: Debugging login
+        debug:
+          msg: "{{ login.cookies.QualysSession }}"
+        when: login.failed == false
+      - name: Logout from session post validation
+        ansible.builtin.uri:
+            url: "https://qualysguard.qg1.apps.qualys.in/api/2.0/fo/session/?action=logout"
+            method: POST
+            headers:
+              X-Requested-With: "Ansible Playbook Logout"
+              Content-Type: "application/x-www-form-urlencoded"
+              Cookie: "QualysSession={{ login.cookies.QualysSession }}; path=/api; secure"
+        when: login.failed == false
+      #  Defining the request body in XML
+      - name: Define search payload (XML) for username
+        ansible.builtin.set_fact:
+          search_payload: |
+            <?xml version="1.0" encoding="UTF-8" ?>
+            <ServiceRequest>
+              <filters>
+                <Criteria field="username" operator="EQUALS">{{ user_name }}</Criteria>
+              </filters>
+              <preferences>
+                <limitResults>500</limitResults>
+              </preferences>
+            </ServiceRequest>
+        when: user_name is defined
+      # Requesting to fetch user information
+      - name: Fetch user details from Qualys using POST with search criteria
+        ansible.builtin.uri:
+          url: "https://qualysapi.qg1.apps.qualys.in/qps/rest/2.0/search/am/user/"
+          method: POST
+          force_basic_auth: yes
+          headers:
+            user: "{{ username }}"
+            password: "{{ password }}"
+            "Content-Type" : "application/xml"
+          body_format: raw
+          body: "{{ search_payload }}"
+          return_content: yes
+        register: user_list
+    # Cleanning and Converting Data to JSON
+      - name: Converting XML to JSON
+        command: |
+            python3 -c "import xmltodict, json, sys; print(json.dumps(xmltodict.parse(sys.stdin.read())))"
+        args:
+            stdin: "{{ user_list.content }}"
+        register: user_list_xml
+      - name: Load JSON string into a structured Ansible variable
+        ansible.builtin.set_fact:
+               user_data_json: "{{ user_list_xml.stdout | from_json }}"
+      - name: Get the User List
+        set_fact:
+            user_list_json: "{{ user_data_json.ServiceResponse.data }}"
+  
+
+
+

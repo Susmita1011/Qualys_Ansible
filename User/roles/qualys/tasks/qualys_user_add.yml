@@ -1,0 +1,86 @@
+- name: Adding Qualys Users
+  block:
+       ### Generating the Session Token to validate the credentials
+      - name: Generating Session Token
+        ansible.builtin.uri:
+                url: https://qualysguard.qg1.apps.qualys.in/api/2.0/fo/session/?action=login
+                method: POST
+                body_format: form-urlencoded
+                body:
+                    username: "{{ username }}"
+                    password: "{{ password }}"
+                headers:
+                    "X-Requested-With": "Ansible"
+                    "Content-Type": "application/x-www-form-urlencoded"
+                return_content: true
+        register: login
+        ##Closing the same session post validation
+      - name: Debugging login
+        debug:
+          msg: "{{ login.cookies.QualysSession }}"
+        when: login.failed == false
+      - name: Logout from session post validation
+        ansible.builtin.uri:
+            url: "https://qualysguard.qg1.apps.qualys.in/api/2.0/fo/session/?action=logout"
+            method: POST
+            headers:
+              X-Requested-With: "Ansible Playbook Logout"
+              Content-Type: "application/x-www-form-urlencoded"
+              Cookie: "QualysSession={{ login.cookies.QualysSession }}; path=/api; secure"
+        when: login.failed == false
+      - name: Setting Data 
+        set_fact:
+           form_data_params:
+                    user_role: "{{ user_role | default(omit) }}"
+                    business_unit: "{{ business_unit | default(omit) }}"
+                    first_name: "{{ first_name }}"
+                    last_name: "{{ last_name }}"
+                    title: "{{ title }}"
+                    phone: "{{ phone | default(omit) }}"
+                    fax: "{{ fax | default(omit) }}"
+                    email: "{{ email }}"
+                    address1: "{{ address1 | default(omit) }}"
+                    address2: "{{ address2 | default(omit) }}"
+                    city: "{{ city | default(omit) }}"
+                    country: "{{ country | default(omit) }}"
+                    state: "{{ state | default(omit) }}"
+                    zip_code: "{{ zip_code | default(omit) }}"
+      - name: Constructing the Parameters
+        set_fact: 
+             encoded_post_body: >-
+                   {% set params = [] %}
+                   {% for key, value in form_data_params.items() %}
+                       {% if value is defined and value is string and value | length > 0 %}
+                          {% set _ = params.append(key + '=' + (value | urlencode)) %}
+                       {% endif %}
+                   {% endfor %}
+                   {{ params | join('&') }}
+        #Creating User Task
+      - name: Create Qualys users
+        ansible.builtin.uri:
+                url: "https://qualysapi.qg1.apps.qualys.in/msp/user.php/?action=add"
+                method: POST
+                headers:
+                     "X-Requested-With": "Ansible"
+                     "Content-Type": "application/x-www-form-urlencoded"
+                user: "{{ username }}"
+                password: "{{ password }}"
+                body_format: raw
+                body: "{{ encoded_post_body }}"
+                return_content: true
+        register: user_add
+      - name: Converting XML to JSON
+        command: |
+            python3 -c "import xmltodict, json, sys; print(json.dumps(xmltodict.parse(sys.stdin.read())))"
+        args:
+            stdin: "{{ user_add.content }}"
+        register: user_add_xml
+      - name : Structured Output 
+        debug:
+          msg: "{{ (user_add_xml.stdout | from_json).USER_OUTPUT.RETURN.MESSAGE }}"
+     
+      
+  
+
+
+

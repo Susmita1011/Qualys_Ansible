@@ -1,0 +1,70 @@
+- name: Listing Qualys Users with Account Pending
+  block:
+       ### Generating the Sessio Token to validate the credentials
+      - name: Generating Session Token
+        ansible.builtin.uri:
+                url: https://qualysguard.qg1.apps.qualys.in/api/2.0/fo/session/?action=login
+                method: POST
+                body_format: form-urlencoded
+                body:
+                    username: "{{ username }}"
+                    password: "{{ password }}"
+                headers:
+                    "X-Requested-With": "Ansible"
+                    "Content-Type": "application/x-www-form-urlencoded"
+                return_content: true
+        register: login
+        ##Closing the same session post validation
+      - name: Debugging login
+        debug:
+          msg: "{{ login.cookies.QualysSession }}"
+        when: login.failed == false
+      - name: Logout from session post validation
+        ansible.builtin.uri:
+            url: "https://qualysguard.qg1.apps.qualys.in/api/2.0/fo/session/?action=logout"
+            method: POST
+            headers:
+              X-Requested-With: "Ansible Playbook Logout"
+              Content-Type: "application/x-www-form-urlencoded"
+              Cookie: "QualysSession={{ login.cookies.QualysSession }}; path=/api; secure"
+        when: login.failed == false
+        #Listing User Task
+      - name: Listing Qualys users
+        ansible.builtin.uri:
+                url: "https://qualysapi.qg1.apps.qualys.in/msp/user_list.php"
+                method: POST
+                headers:
+                     "X-Requested-With": "Ansible"
+                     "Content-Type": "application/x-www-form-urlencoded"
+                user: "{{ username }}"
+                password: "{{ password }}"
+                return_content: true
+        register: user_list
+      - name: Converting XML to JSON
+        command: |
+            python3 -c "import xmltodict, json, sys; print(json.dumps(xmltodict.parse(sys.stdin.read())))"
+        args:
+            stdin: "{{ user_list.content }}"
+        register: user_list_xml
+      - name: Load JSON string into a structured Ansible variable
+        ansible.builtin.set_fact:
+               user_data_json: "{{ user_list_xml.stdout | from_json }}"
+      - name: Debug
+        debug:
+          msg: "{{ user_data_json.USER_LIST_OUTPUT.USER_LIST.USER }}"
+      - name: Initialize empty List
+        set_fact:
+            unactivated: []
+      - name: Listing Unactivated Accounts
+        set_fact:
+            unactivated: "{{ unactivated | default([]) + [item] }}"
+        loop: "{{ user_data_json.USER_LIST_OUTPUT.USER_LIST.USER }}"
+        when: item.USER_STATUS == "Pending Activation"
+      - name: Debugging the User List
+        debug:
+            msg: "{{ unactivated }}"
+      
+  
+
+
+
